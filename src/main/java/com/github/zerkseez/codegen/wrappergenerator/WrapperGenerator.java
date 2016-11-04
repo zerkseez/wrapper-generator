@@ -26,8 +26,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
+import com.github.zerkseez.codegen.codewriter.CodeWriter;
+import com.github.zerkseez.codegen.codewriter.JavaFileWriter;
 import com.strobel.reflection.MethodInfo;
 import com.strobel.reflection.MethodList;
 import com.strobel.reflection.ParameterInfo;
@@ -41,13 +41,10 @@ import com.strobel.reflection.Type;
  *
  */
 public class WrapperGenerator {
-	public static final String INDENTATION = "    ";
-
 	private final Class<?> clazz;
 	private final Type<?> type;
 	private final String wrapperPackageName;
 	private final String wrapperClassName;
-	private final TypeRenderer typeRenderer;
 
 	/**
 	 * Constructs a WrapperGenerator with default wrapper class name
@@ -76,7 +73,6 @@ public class WrapperGenerator {
 		this.type = Type.of(clazz);
 		this.wrapperPackageName = wrapperPackageName;
 		this.wrapperClassName = wrapperClassName;
-		this.typeRenderer = new TypeRenderer();
 	}
 
 	/**
@@ -131,33 +127,27 @@ public class WrapperGenerator {
 	 * @return The wrapper code in Java
 	 */
 	public String generateWrapper() {
-		final WrapperGeneratorContext context = new WrapperGeneratorContext(type);
-		final StringBuilder sb = new StringBuilder();
-		if (!Strings.isNullOrEmpty(wrapperPackageName)) {
-			writeLine(sb, 0, "package %s;", wrapperPackageName);
-			writeLine(sb);
-		}
-		writeLine(sb, 0, "import javax.annotation.Generated;");
-		writeLine(sb);
-		writeLine(sb, 0, "@Generated(\"%s\")", this.getClass().getName());
-		write(sb, generateClassBody(context));
-		return sb.toString();
-	}
+		final JavaFileWriter writer = new JavaFileWriter(wrapperPackageName);
 
-	protected String generateClassBody(final WrapperGeneratorContext context) {
-		final StringBuilder sb = new StringBuilder();
-		write(sb, "public class %s", wrapperClassName);
+		// Class definition
+		writer.write("public class %s", wrapperClassName);
 		if (type.containsGenericParameters()) {
-			write(sb, typeRenderer.renderGenericTypeParameters(type.getGenericTypeParameters(), context));
+			writer.renderGenericTypeParameters(type.getGenericTypeParameters());
 		}
 		if (clazz.isInterface()) {
-			writeLine(sb, 0, " implements %s {", typeRenderer.renderType(type, context));
+			writer.write(" implements ");
 		} else {
-			writeLine(sb, 0, " extends %s {", typeRenderer.renderType(type, context));
+			writer.write(" extends ");
 		}
-		writeLine(sb, 1, "private final %s wrappedObject;", typeRenderer.renderType(type, context));
-		writeLine(sb);
-		write(sb, generateConstructor(context));
+		writer.renderType(type).writeLine(" {");
+
+		// Fields
+		writer.indent().write("private final ").renderType(type).writeLine(" wrappedObject;").writeLine();
+
+		// Constructor
+		generateConstructor(writer.newCodeBlock());
+
+		// Methods
 		final Map<String, List<String>> methods = new HashMap<String, List<String>>();
 		final MethodList methodList = type.getMethods();
 		for (int i = 0; i < methodList.size(); i++) {
@@ -168,7 +158,7 @@ public class WrapperGenerator {
 					methodBodies = new ArrayList<String>();
 					methods.put(methodInfo.getName(), methodBodies);
 				}
-				methodBodies.add(generateMethod(methodInfo, context.newFrame()));
+				methodBodies.add(generateMethod(methodInfo, writer.newCodeBlock(false)));
 			}
 		}
 		final List<String> methodNames = new ArrayList<String>(methods.keySet());
@@ -177,89 +167,78 @@ public class WrapperGenerator {
 			final List<String> methodBodies = methods.get(methodName);
 			methodBodies.sort((a, b) -> Integer.compare(a.length(), b.length()));
 			for (String methodBody : methodBodies) {
-				writeLine(sb);
-				write(sb, methodBody);
+				writer.writeLine().write(methodBody);
 			}
 		}
-		writeLine(sb, 0, "}");
-		return sb.toString();
+
+		return writer.writeLine("}").toString();
 	}
 
-	protected String generateConstructor(final WrapperGeneratorContext context) {
-		final StringBuilder sb = new StringBuilder();
-		writeLine(sb, 1, "public %s(final %s wrappedObject) {", wrapperClassName,
-				typeRenderer.renderType(type, context));
-		writeLine(sb, 2, "this.wrappedObject = wrappedObject;");
-		writeLine(sb, 1, "}");
-		return sb.toString();
+	protected String generateConstructor(final CodeWriter<?> w) {
+		w.indent().write("public %s(final ", wrapperClassName).renderType(type).writeLine(" wrappedObject) {");
+		w.indent(2).writeLine("this.wrappedObject = wrappedObject;");
+		return w.indent().writeLine("}").toString();
 	}
 
-	protected String generateMethod(final MethodInfo method, final WrapperGeneratorContext context) {
-		final StringBuilder sb = new StringBuilder();
-		writeLine(sb, 1, "@Override");
+	protected String generateMethod(final MethodInfo method, final CodeWriter<?> w) {
+		// Annotations
+		w.indent().writeLine("@Override");
 		if (method.isAnnotationPresent(Deprecated.class)) {
-			writeLine(sb, 1, "@Deprecated");
+			w.indent().writeLine("@Deprecated");
 		}
-		write(sb, INDENTATION);
-		write(sb, "public ");
+		
+		// Modifiers
+		w.indent().write("public ");
+		
+		// Type parameters
 		if (method.isGenericMethod()) {
-			write(sb, typeRenderer.renderGenericTypeParameters(method.getTypeArguments(), context));
-			write(sb, " ");
+			w.renderGenericTypeParameters(method.getTypeArguments()).space();
 		}
-		final String returnType = typeRenderer.renderType(method.getReturnType(), context);
-		write(sb, "%s %s(", returnType, method.getName());
+		
+		// Return type
+		final String returnType = w.renderTypeToString(method.getReturnType());
+		w.write(returnType).space();
+		
+		// Method name
+		w.write(method.getName()).write("(");
+		
+		// Parameters
 		final ParameterList parameterList = method.getParameters();
 		final List<String> parameters = new ArrayList<String>();
 		final List<String> parameterNames = new ArrayList<String>();
 		for (int i = 0; i < parameterList.size(); i++) {
 			final ParameterInfo parameterInfo = parameterList.get(i);
 			parameters.add(String.format("final %s %s",
-					typeRenderer.renderType(parameterInfo.getParameterType(), context), parameterInfo.getName()));
+					w.renderTypeToString(parameterInfo.getParameterType()), parameterInfo.getName()));
 			parameterNames.add(parameterInfo.getName());
 		}
-		write(sb, Joiner.on(", ").join(parameters));
-		write(sb, ") ");
+		w.writeList(", ", parameters).write(") ");
+
+		// Throws
 		if (!method.getThrownTypes().isEmpty()) {
-			write(sb, "throws ");
+			w.write("throws ");
 			for (int i = 0; i < method.getThrownTypes().size(); i++) {
 				if (i != 0) {
-					write(sb, ", ");
+					w.write(", ");
 				}
-				write(sb, typeRenderer.renderType(method.getThrownTypes().get(i), context));
+				w.renderType(method.getThrownTypes().get(i));
 			}
-			write(sb, " ");
+			w.space();
 		}
-		writeLine(sb, 0, "{");
-		write(sb, INDENTATION);
-		write(sb, INDENTATION);
+		w.writeLine("{");
+		
+		// Body
+		w.indent(2);
 		if (!"void".equals(returnType)) {
-			write(sb, "return ");
+			w.write("return ");
 		}
-		write(sb, "wrappedObject.%s(", method.getName());
+		w.write("wrappedObject.%s(", method.getName());
 		for (int i = 0; i < parameterList.size(); i++) {
 			final ParameterInfo parameterInfo = parameterList.get(i);
 			parameters.add(parameterInfo.getName());
 		}
-		write(sb, Joiner.on(", ").join(parameterNames));
-		writeLine(sb, 0, ");");
-		writeLine(sb, 1, "}");
-		return sb.toString();
-	}
+		w.writeList(", ", parameterNames).writeLine(");");
 
-	protected void write(final StringBuilder sb, final String content, final Object... args) {
-		sb.append(String.format(content, args));
-	}
-
-	protected void writeLine(final StringBuilder sb) {
-		sb.append('\n');
-	}
-
-	protected void writeLine(final StringBuilder sb, final int indentation, final String content,
-			final Object... args) {
-		for (int i = 0; i < indentation; i++) {
-			sb.append(INDENTATION);
-		}
-		write(sb, content, args);
-		writeLine(sb);
+		return w.indent().writeLine("}").toString();
 	}
 }
