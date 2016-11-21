@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import javax.annotation.Generated;
+
 import com.google.common.base.Strings;
 
 /**
@@ -28,7 +30,10 @@ import com.google.common.base.Strings;
  *
  */
 public class JavaFileWriter extends CodeWriter<JavaFileWriter> {
+    private static final String DEFAULT_PACKAGE_NAME = "java.lang.";
+    
     private String packageName = null;
+    private Class<?> generatorClass = null;
     private final Map<String, String> imports;
 
     /**
@@ -38,11 +43,12 @@ public class JavaFileWriter extends CodeWriter<JavaFileWriter> {
         this(null);
     }
 
-    /**
-     * Constructs a JavaFileWriter and sets the package name
-     * 
-     * @param packageName
-     */
+	/**
+	 * Constructs a JavaFileWriter and sets the package name
+	 * 
+	 * @param packageName
+	 *            The package name of this java file
+	 */
     public JavaFileWriter(final String packageName) {
         this.packageName = packageName;
         this.imports = new HashMap<String, String>();
@@ -62,9 +68,31 @@ public class JavaFileWriter extends CodeWriter<JavaFileWriter> {
      * 
      * @param packageName
      *            The package name
+     * @return This JavaFileWriter object for chaining purpose
      */
     public JavaFileWriter setPackageName(final String packageName) {
         this.packageName = packageName;
+        return this;
+    }
+
+    /**
+     * Gets the code generator class
+     * 
+     * @return The code generator class
+     */
+    public Class<?> getGeneratorClass() {
+        return generatorClass;
+    }
+
+    /**
+     * Sets the code generator class
+     * 
+     * @param generatorClass
+     *            The code generator class
+     * @return This JavaFileWriter object for chaining purpose
+     */
+    public JavaFileWriter setGeneratorClass(final Class<?> generatorClass) {
+        this.generatorClass = generatorClass;
         return this;
     }
 
@@ -74,28 +102,54 @@ public class JavaFileWriter extends CodeWriter<JavaFileWriter> {
     @Override
     public String toString() {
         final StringBuilder s = new StringBuilder();
+        final String annotations = getAnnotations();
+
         if (!Strings.isNullOrEmpty(getPackageName())) {
-            s.append(String.format("package %s;\n\n", getPackageName()));
+            s.append(String.format("package %s;\n", getPackageName()));
         }
+
+        String lastRootPackageName = "";
         for (String className : imports.values().stream().sorted().collect(Collectors.toList())) {
+            final String rootPackageName = className.substring(0, className.indexOf('.'));
+            if (!lastRootPackageName.equals(rootPackageName)) {
+                lastRootPackageName = rootPackageName;
+                s.append(NEW_LINE);
+            }
             s.append(String.format("import %s;\n", className));
         }
-        s.append("\n");
-        s.append(super.toString());
+
+        s.append(NEW_LINE).append(annotations).append(super.toString());
+        return s.toString();
+    }
+
+    protected String getAnnotations() {
+        final StringBuilder s = new StringBuilder();
+        if (getGeneratorClass() != null) {
+            s.append("@").append(getStringOfType(Generated.class));
+            s.append("(\"").append(getGeneratorClass().getName()).append("\")").append(NEW_LINE);
+        }
         return s.toString();
     }
 
     @Override
-    protected String tryImportType(final String typeFullName) {
-        final int indexOfLastDot = typeFullName.lastIndexOf('.');
-        if (indexOfLastDot != -1) {
-            final String simpleName = typeFullName.substring(indexOfLastDot + 1);
-            if (imports.containsKey(simpleName)) {
-                return imports.get(simpleName).equals(typeFullName) ? simpleName : typeFullName;
-            }
-            imports.put(simpleName, typeFullName);
-            return simpleName;
+    public boolean isImported(final String className) {
+        if (
+                className.startsWith(DEFAULT_PACKAGE_NAME)
+                && !className.substring(DEFAULT_PACKAGE_NAME.length()).contains(".")
+        ) {
+            return true;
         }
-        return typeFullName;
+        
+        final int indexOfLastDot = className.lastIndexOf('.');
+        if (indexOfLastDot != -1) {
+            final String simpleName = className.substring(indexOfLastDot + 1);
+            if (imports.containsKey(simpleName)) {
+                return imports.get(simpleName).equals(className);
+            }
+            imports.put(simpleName, className);
+            return true;
+        }
+
+        return true;
     }
 }

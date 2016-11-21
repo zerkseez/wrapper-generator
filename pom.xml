@@ -9,13 +9,15 @@
 	<name>Wrapper Generator</name>
 	<description>A utility for generating wrapper class for any interface</description>
 	<url>https://github.com/zerkseez/wrapper-generator</url>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<packaging>jar</packaging>
 
 	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
 		<commons-cli.version>1.3.1</commons-cli.version>
-		<guava.version>18.0</guava.version>
-		<procyon.version>0.5.32</procyon.version>
+		<generic-reflection.version>1.1.0</generic-reflection.version>
+		<guava.version>20.0</guava.version>
 		<junit.version>4.12</junit.version>
 		<maven-compiler-plugin.version>3.5.1</maven-compiler-plugin.version>
 		<maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
@@ -25,6 +27,10 @@
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>com.github.zerkseez</groupId>
+			<artifactId>generic-reflection</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
@@ -38,14 +44,15 @@
 			<artifactId>junit</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>org.bitbucket.mstrobel</groupId>
-			<artifactId>procyon-reflection</artifactId>
-		</dependency>
 	</dependencies>
 
 	<dependencyManagement>
 		<dependencies>
+			<dependency>
+				<groupId>com.github.zerkseez</groupId>
+				<artifactId>generic-reflection</artifactId>
+				<version>${generic-reflection.version}</version>
+			</dependency>
 			<dependency>
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
@@ -60,11 +67,6 @@
 				<groupId>junit</groupId>
 				<artifactId>junit</artifactId>
 				<version>${junit.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.bitbucket.mstrobel</groupId>
-				<artifactId>procyon-reflection</artifactId>
-				<version>${procyon.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
