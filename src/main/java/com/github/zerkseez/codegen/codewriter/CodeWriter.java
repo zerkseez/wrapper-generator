@@ -16,13 +16,15 @@
 package com.github.zerkseez.codegen.codewriter;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
+import com.github.zerkseez.reflection.Reflection;
+import com.github.zerkseez.reflection.TypeInfo;
+import com.github.zerkseez.reflection.TypeVariableInfo;
 import com.google.common.base.Joiner;
-import com.strobel.reflection.Type;
-import com.strobel.reflection.TypeList;
-import com.strobel.reflection.Types;
 
 /**
  * Abstract writer class for writing Java source code
@@ -32,14 +34,13 @@ import com.strobel.reflection.Types;
  * @param <T>
  *            Any concrete sub-class of this class
  */
-public abstract class CodeWriter<T extends CodeWriter<T>> {
+public abstract class CodeWriter<T extends CodeWriter<T>> implements TypeInfo.ToStringContext {
     public static final String INDENTATION = "    ";
     public static final String NEW_LINE = "\n";
 
     private final CodeWriter<?> parent;
     private final List<Object> segments;
-    private final List<String> definedGenericParameters;
-    private final List<CodeWriterListener> listeners;
+    private final Set<String> definedTypeVariables;
 
     /**
      * Constructs a CodeWriter object with no parent
@@ -48,14 +49,16 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
         this(null);
     }
 
-    /**
-     * Constructs a CodeWriter object with the specified parent
-     */
+	/**
+	 * Constructs a CodeWriter object with the specified parent
+	 * 
+	 * @param parent
+	 *            The parent CodeWriter object
+	 */
     public CodeWriter(final CodeWriter<?> parent) {
         this.parent = parent;
         this.segments = new ArrayList<Object>();
-        this.definedGenericParameters = new ArrayList<String>();
-        this.listeners = new ArrayList<CodeWriterListener>();
+        this.definedTypeVariables = new HashSet<String>();
     }
 
     /**
@@ -68,19 +71,19 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
     }
 
     /**
-     * Writes the specified text
+     * Appends the specified text
      * 
      * @param text
-     *            The text to be written
+     *            The text to be appended
      * @return This object for chaining purpose
      */
-    public T write(final String text) {
+    public T append(final String text) {
         segments.add(text);
         return self();
     }
 
     /**
-     * Writes the specified formatted text
+     * Appends the specified formatted text
      * 
      * @param pattern
      *            The pattern to be used in String.format()
@@ -88,32 +91,32 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
      *            The arguments to be used in String.format()
      * @return This object for chaining purpose
      */
-    public T write(final String pattern, final Object... args) {
-        return write(String.format(pattern, args));
+    public T append(final String pattern, final Object... args) {
+        return append(String.format(pattern, args));
     }
 
     /**
-     * Writes a new line
+     * Appends a new line
      *
      * @return This object for chaining purpose
      */
-    public T writeLine() {
-        return write(NEW_LINE);
+    public T appendLine() {
+        return append(NEW_LINE);
     }
 
     /**
-     * Writes the specified text followed by a new line
+     * Appends the specified text followed by a new line
      * 
      * @param text
-     *            The text to be written
+     *            The text to be appended
      * @return This object for chaining purpose
      */
-    public T writeLine(final String text) {
-        return write(text).write(NEW_LINE);
+    public T appendLine(final String text) {
+        return append(text).append(NEW_LINE);
     }
 
     /**
-     * Writes the specified formatted text followed by a new line
+     * Appends the specified formatted text followed by a new line
      * 
      * @param pattern
      *            The pattern to be used in String.format()
@@ -121,13 +124,24 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
      *            The arguments to be used in String.format()
      * @return This object for chaining purpose
      */
-    public T writeLine(final String pattern, final Object... args) {
-        return write(pattern, args).write(NEW_LINE);
+    public T appendLine(final String pattern, final Object... args) {
+        return append(pattern, args).append(NEW_LINE);
+    }
+    
+	/**
+	 * Appends the specified string as string literal
+	 * 
+	 * @param text
+	 *            The string to be appended
+	 * @return This object for chaining purpose
+	 */
+    public T appendStringLiteral(final String text) {
+        return append("\"").append(text.replaceAll("\\\\", "\\\\").replaceAll("\"", "\\\"")).append("\"");
     }
 
     /**
-     * Joins the specified list with the specified separator and write the join
-     * result
+     * Joins the specified list with the specified separator and appends the
+     * join result
      * 
      * @param separator
      *            The separator
@@ -135,13 +149,13 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
      *            The parts to be joined
      * @return This object for chaining purpose
      */
-    public T writeList(final String separator, final Iterable<?> parts) {
-        return write(Joiner.on(separator).join(parts));
+    public T appendList(final String separator, final Iterable<?> parts) {
+        return append(Joiner.on(separator).join(parts));
     }
 
     /**
-     * Joins the specified list with the specified separator and write the join
-     * result
+     * Joins the specified list with the specified separator and appends the
+     * join result
      * 
      * @param separator
      *            The separator
@@ -149,13 +163,13 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
      *            The parts to be joined
      * @return This object for chaining purpose
      */
-    public T writeList(final String separator, final Iterator<?> parts) {
-        return write(Joiner.on(separator).join(parts));
+    public T appendList(final String separator, final Iterator<?> parts) {
+        return append(Joiner.on(separator).join(parts));
     }
 
     /**
-     * Joins the specified list with the specified separator and write the join
-     * result
+     * Joins the specified list with the specified separator and appends the
+     * join result
      * 
      * @param separator
      *            The separator
@@ -163,24 +177,26 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
      *            The parts to be joined
      * @return This object for chaining purpose
      */
-    public T writeList(final String separator, final Object[] parts) {
-        return write(Joiner.on(separator).join(parts));
+    public T appendList(final String separator, final Object[] parts) {
+        return append(Joiner.on(separator).join(parts));
     }
 
     /**
-     * Writes an indentation
+     * Appends an indentation
      * 
      * @return This object for chaining purpose
      */
     public T indent() {
-        return write(INDENTATION);
+        return append(INDENTATION);
     }
 
-    /**
-     * Writes the specified number of indentations
-     * 
-     * @return This object for chaining purpose
-     */
+	/**
+	 * Appends the specified number of indentations
+	 * 
+	 * @param times
+	 *            Number of indentations
+	 * @return This object for chaining purpose
+	 */
     public T indent(final int times) {
         for (int i = 0; i < times; i++) {
             indent();
@@ -189,19 +205,21 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
     }
 
     /**
-     * Writes a space
+     * Appends a space
      * 
      * @return This object for chaining purpose
      */
     public T space() {
-        return write(" ");
+        return append(" ");
     }
 
-    /**
-     * Writes the specified number of spaces
-     * 
-     * @return This object for chaining purpose
-     */
+	/**
+	 * Appends the specified number of spaces
+	 * 
+	 * @param times
+	 *            Number of spaces
+	 * @return This object for chaining purpose
+	 */
     public T space(final int times) {
         for (int i = 0; i < times; i++) {
             space();
@@ -210,109 +228,162 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
     }
 
     /**
-     * Writes the name of the specified type including its generic type
-     * parameters. The type will be imported if possible.
+     * Appends a dot
+     * 
+     * @return This object for chaining purpose
+     */
+    public T dot() {
+        return append(".");
+    }
+
+    /**
+     * Appends a quote
+     * 
+     * @return This object for chaining purpose
+     */
+    public T quote() {
+        return append("\"");
+    }
+
+    /**
+     * Appends the name of the specified type including any generic type
+     * variables
      * 
      * @param type
      *            The type to be rendered
      * @return This object for chaining purpose
      */
-    public T renderType(final Class<?> type) {
-        return renderType(type, true);
+    public T append(final Class<?> type) {
+        return append(type, true);
     }
 
     /**
-     * Writes the name of the specified type including its generic type
-     * parameters and optionally import the type if possible
+     * Appends the name of the specified type
      * 
      * @param type
      *            The type to be rendered
-     * @param importIfPossible
-     *            Indicates whether the type should be imported (if possible)
+     * @param includeTypeVariables
+     *            Indicates whether type variables should be included
      * @return This object for chaining purpose
      */
-    public T renderType(final Class<?> type, final boolean importIfPossible) {
-        return renderType(Type.of(type), importIfPossible);
+    public T append(final Class<?> type, final boolean includeTypeVariables) {
+        return append(getStringOfType(type, includeTypeVariables));
     }
-
+    
     /**
-     * Writes the name of the specified type including its generic type
-     * parameters. The type will be imported if possible.
+     * Appends the name of the specified type including any generic type
+     * variables
      * 
      * @param type
      *            The type to be rendered
      * @return This object for chaining purpose
      */
-    public T renderType(final Type<?> type) {
-        return renderType(type, true);
+    public T append(final TypeInfo<?> type) {
+        return append(type, true);
     }
-
+    
     /**
-     * Writes the name of the specified type including its generic type
-     * parameters and optionally import the type if possible
+     * Appends the name of the specified type
      * 
      * @param type
      *            The type to be rendered
-     * @param importIfPossible
-     *            Indicates whether the type should be imported (if possible)
+     * @param includeTypeVariables
+     *            Indicates whether type variables should be included
      * @return This object for chaining purpose
      */
-    public T renderType(final Type<?> type, final boolean importIfPossible) {
-        return write(renderTypeToString(type, importIfPossible));
+    public T append(final TypeInfo<?> type, final boolean includeTypeVariables) {
+        return append(getStringOfType(type, includeTypeVariables));
+    }
+    
+	/**
+	 * Tries importing the specified class name if possible and appends it
+	 * 
+	 * @param fullClassName
+	 *            The full name of the class to be appended
+	 * @return This object for chaining purpose
+	 */
+    public T appendClassName(final String fullClassName) {
+    	return append(tryImportType(fullClassName));
+    }
+    
+	/**
+	 * Gets the string representation of the specified type including any
+	 * generic type variables
+	 * 
+	 * @param type
+	 *            The type to be rendered
+	 * @return The string representation of the specified type
+	 */
+    public String getStringOfType(final Class<?> type) {
+        return getStringOfType(type, true);
+    }
+    
+	/**
+	 * Gets the string representation of the specified type, optionally
+	 * excluding the type variables if the specified type is a generic type
+	 * 
+	 * @param type
+	 *            The type to be rendered
+	 * @param includeTypeVariables
+	 *            Indicates whether type variables should be included
+	 * @return The string representation of the specified type
+	 */
+    public String getStringOfType(final Class<?> type, final boolean includeTypeVariables) {
+        return getStringOfType(Reflection.getTypeInfo(type), includeTypeVariables);
     }
 
     /**
-     * Renders the name of the specified type including its generic type
-     * parameters to a string
-     * 
-     * @param type
-     *            The type to be rendered
-     * @return The render result
-     */
-    public String renderTypeToString(final Type<?> type) {
-        return renderTypeToString(type, true);
+	 * Gets the string representation of the specified type including any
+	 * generic type variables
+	 * 
+	 * @param type
+	 *            The type to be rendered
+	 * @return The string representation of the specified type
+	 */
+    public String getStringOfType(final TypeInfo<?> type) {
+        return getStringOfType(type, true);
+    }
+    
+    /**
+	 * Gets the string representation of the specified type, optionally
+	 * excluding the type variables if the specified type is a generic type
+	 * 
+	 * @param type
+	 *            The type to be rendered
+	 * @param includeTypeVariables
+	 *            Indicates whether type variables should be included
+	 * @return The string representation of the specified type
+	 */
+    public String getStringOfType(final TypeInfo<?> type, final boolean includeTypeVariables) {
+        return type.toString(this, includeTypeVariables);
     }
 
     /**
-     * Renders the name of the specified type including its generic type
-     * parameters to a string and optionally import the type if possible
-     * 
-     * @param type
-     *            The type to be rendered
-     * @param importIfPossible
-     *            Indicates whether the type should be imported (if possible)
-     * @return The render result
-     */
-    public String renderTypeToString(final Type<?> type, final boolean importIfPossible) {
-        return renderTypeToString(type, importIfPossible, this);
-    }
-
-    /**
-     * Renders the specified TypeList as generic type parameters
+     * Renders the specified list of types as generic type variables
      * 
      * @param typeList
-     *            The TypeList to be rendered
+     *            The list of type variables to be rendered
      * @return This object for chaining purpose
      */
-    public T renderGenericTypeParameters(final TypeList typeList) {
-        return write(renderGenericTypeParametersToString(typeList));
+    public T appendTypeVariables(final List<TypeVariableInfo> typeList) {
+        return append(getStringOfTypeVariables(typeList));
     }
 
     /**
-     * Renders the specified TypeList as generic type parameters to a string
+     * Renders the specified list of types as generic type variables to a string
      * 
      * @param typeList
-     *            The TypeList to be rendered
+     *            The list of type variables to be rendered
      * @return The render result
      */
-    public String renderGenericTypeParametersToString(final TypeList typeList) {
+    public String getStringOfTypeVariables(final List<TypeVariableInfo> typeList) {
         final StringBuilder sb = new StringBuilder();
         sb.append('<');
         for (int i = 0; i < typeList.size(); ++i) {
             if (i != 0) {
                 sb.append(", ");
             }
-            sb.append(renderTypeToString(typeList.get(i), true));
+            sb.append(getStringOfType(typeList.get(i), true));
         }
         sb.append('>');
         return sb.toString();
@@ -345,138 +416,48 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
         }
         return methodWriter;
     }
-
+    
     /**
-     * Gets all listeners, including listeners from parents
+     * Tries importing a class
      * 
-     * @return All listeners
+     * @param fullClassName
+     *            The full class name of the class to import
+     * @return The simple name of the class if the class is imported
+     *         successfully; or the full name of the class otherwise
      */
-    public List<CodeWriterListener> getListeners() {
-        final List<CodeWriterListener> result = new ArrayList<CodeWriterListener>(listeners);
-        if (parent != null) {
-            result.addAll(parent.getListeners());
+    public String tryImportType(final String fullClassName) {
+        if (!isImported(fullClassName)) {
+            return fullClassName;
         }
-        return result;
+        final int indexOfLastDot = fullClassName.lastIndexOf('.');
+        if (indexOfLastDot != -1) {
+            return fullClassName.substring(indexOfLastDot + 1);
+        }
+        return fullClassName;
     }
 
-    /**
-     * Adds a listener
-     * 
-     * @param listener
-     *            The listener to be added
-     */
-    public void addListener(final CodeWriterListener listener) {
-        listeners.add(listener);
-    }
-
-    /**
-     * Gets the content written so far
-     */
     @Override
-    public String toString() {
-        return Joiner.on("").join(segments);
-    }
-
-    protected void addGenericParameter(final String name) {
-        definedGenericParameters.add(name);
-    }
-
-    protected boolean isGenericParameterDefined(final String name) {
-        if (definedGenericParameters.contains(name)) {
+    public boolean isTypeVariableDefined(final String typeVariableId) {
+        if (definedTypeVariables.contains(typeVariableId)) {
             return true;
         }
         if (parent != null) {
-            return parent.isGenericParameterDefined(name);
+            return parent.isTypeVariableDefined(typeVariableId);
         }
         return false;
     }
 
-    protected abstract String tryImportType(final String typeFullName);
-
-    protected String renderTypeToString(final Type<?> type,
-                                        final boolean importIfPossible,
-                                        final CodeWriter<?> context) {
-        final StringBuilder sb = new StringBuilder();
-        final String typeFullName = normalizeTypeFullName(type.getFullName());
-
-        if (type.isArray()) {
-            sb.append(renderTypeToString(type.getElementType(), true));
-            sb.append("[]");
-        }
-        else if (type.isGenericType()) {
-            onVisitType(type);
-            sb.append(importIfPossible ? tryImportType(typeFullName) : typeFullName);
-            sb.append(renderGenericTypeParametersToString(type.getTypeArguments()));
-        }
-        else if (type.isGenericParameter()) {
-            sb.append(typeFullName);
-            if (!context.isGenericParameterDefined(typeFullName)) {
-                context.addGenericParameter(typeFullName);
-                sb.append(renderSuperAndExtendsBounds(type));
-            }
-        }
-        else if (type.isCompoundType()) {
-            final Type<?> baseType = type.getBaseType();
-            final TypeList interfaces = type.getInterfaces();
-            if (baseType != Types.Object) {
-                sb.append(renderTypeToString(baseType, true, newCodeBlock()));
-                if (!interfaces.isEmpty()) {
-                    sb.append(" & ");
-                }
-            }
-            for (int i = 0, n = interfaces.size(); i < n; i++) {
-                if (i != 0) {
-                    sb.append(" & ");
-                }
-                sb.append(renderTypeToString(interfaces.get(i), true, newCodeBlock()));
-            }
-        }
-        else if (type.isWildcardType()) {
-            sb.append('?');
-            sb.append(renderSuperAndExtendsBounds(type));
-        }
-        else {
-            onVisitType(type);
-            sb.append(importIfPossible ? tryImportType(typeFullName) : typeFullName);
-        }
-
-        return sb.toString();
+    @Override
+    public void defineTypeVariable(final String typeVariableId) {
+        definedTypeVariables.add(typeVariableId);
     }
 
-    protected String renderSuperAndExtendsBounds(final Type<?> type) {
-        final StringBuilder sb = new StringBuilder();
-        final Type<?> superBound = type.getSuperBound();
-        if (superBound != null && superBound != Types.Object) {
-            final String superTypeName = renderTypeToString(superBound, true, newCodeBlock());
-            if (!"<any>".equals(superTypeName)) {
-                sb.append(" super ");
-                sb.append(superTypeName);
-            }
-        }
-        final Type<?> upperBound = type.getExtendsBound();
-        if (upperBound != null && upperBound != Types.Object) {
-            sb.append(" extends ");
-            sb.append(renderTypeToString(upperBound, true, newCodeBlock()));
-        }
-        return sb.toString();
-    }
-
-    protected String convertBinaryNameToJavaName(final String binaryName) {
-        return binaryName.replace('$', '.');
-    }
-
-    protected String removeDefaultPackageName(final String typeName) {
-        return typeName.replace("java.lang.", "");
-    }
-
-    protected String normalizeTypeFullName(final String typeName) {
-        return convertBinaryNameToJavaName(removeDefaultPackageName(typeName));
-    }
-
-    protected void onVisitType(final Type<?> type) {
-        for (CodeWriterListener listener : getListeners()) {
-            listener.onVisitType(type);
-        }
+    /**
+     * Gets the content
+     */
+    @Override
+    public String toString() {
+        return Joiner.on("").join(segments);
     }
 
     @SuppressWarnings("unchecked")
@@ -490,8 +471,8 @@ public abstract class CodeWriter<T extends CodeWriter<T>> {
         }
 
         @Override
-        protected String tryImportType(final String typeFullName) {
-            return getParent().tryImportType(typeFullName);
+        public boolean isImported(final String canonicalClassName) {
+            return getParent().isImported(canonicalClassName);
         }
     }
 }

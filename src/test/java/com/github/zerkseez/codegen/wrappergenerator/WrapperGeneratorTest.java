@@ -25,8 +25,6 @@ import java.util.Map;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.google.common.io.Files;
-
 public class WrapperGeneratorTest {
     @Test
     public void testWrapMap() throws Exception {
@@ -44,7 +42,7 @@ public class WrapperGeneratorTest {
     }
 
     protected void runTest(final Class<?> wrappee) throws Exception {
-        final File tempDir = Files.createTempDir();
+        final File tempDir = new File("/home/xerxes/tmp"); //Files.createTempDir();
         final File outputFile = new File(tempDir, String.format("Wrapped%s.java", wrappee.getSimpleName()));
         final WrapperGenerator generator = new WrapperGenerator(wrappee, "");
         generator.writeTo(tempDir.getAbsolutePath(), true);
